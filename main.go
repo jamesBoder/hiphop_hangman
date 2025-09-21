@@ -10,12 +10,71 @@ import (
 
 // CLI Hiphop Hangman game
 
+// Category mapping
+var categories = map[string]string{
+	"1": "east_coast.txt",
+	"2": "west_coast.txt",
+	"3": "south.txt",
+	"4": "midwest.txt",
+	"5": "international.txt",
+	"6": "groups.txt",
+	"7": "names.txt", // All artists
+}
+
+var categoryNames = map[string]string{
+	"1": "East Coast (NY, NJ, PA, MD, VA, CT)",
+	"2": "West Coast (CA, WA, OR, NV)",
+	"3": "South (GA, TX, FL, AL, MS, LA, NC, SC, TN)",
+	"4": "Midwest (IL, MI, OH, MN, WI, IN)",
+	"5": "International (Non-US artists)",
+	"6": "Groups (Collective groups)",
+	"7": "All Artists (Complete collection)",
+}
+
+// getCategoryStats returns the number of artists in a category file
+func getCategoryStats(file string) int {
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return 0
+	}
+	words := strings.Split(strings.TrimSpace(string(data)), "\n")
+	return len(words)
+}
+
+// displayCategories shows available categories with artist counts
+func displayCategories() {
+	fmt.Println("=== Welcome to Hiphop Hangman ===")
+	fmt.Println("\n=== Choose Your Hip Hop Category ===")
+	for key, name := range categoryNames {
+		file := categories[key]
+		count := getCategoryStats(file)
+		fmt.Printf("%s: %s (%d artists)\n", key, name, count)
+	}
+	fmt.Println()
+}
+
+// selectCategory prompts user to choose a category and returns the file path
+func selectCategory(scanner *bufio.Scanner) string {
+	for {
+		fmt.Print("Enter category number (1-7): ")
+		scanner.Scan()
+		choice := strings.TrimSpace(scanner.Text())
+
+		if file, exists := categories[choice]; exists {
+			categoryName := categoryNames[choice]
+			fmt.Printf("Selected: %s\n\n", categoryName)
+			return file
+		}
+		fmt.Println("Invalid choice. Please enter a number between 1 and 7.")
+	}
+}
+
 // Init word state. This function creates a slice of the same length as the word and fills it with underscores,
-// but reveals spaces and hyphens as is.
+// but reveals spaces, hyphens, and periods as is.
 func initWordState(word string) []string {
 	state := make([]string, len(word))
 	for i, char := range word {
-		if char == ' ' || char == '-' {
+		if char == ' ' || char == '-' || char == '.' {
 			state[i] = string(char)
 		} else {
 			state[i] = "_"
@@ -111,9 +170,15 @@ func displayGuessedLetters(guessed []string) {
 }
 
 func main() {
+	// take user input using bufio and os packages
+	scanner := bufio.NewScanner(os.Stdin)
+
+	// Category selection
+	displayCategories()
+	selectedFile := selectCategory(scanner)
 
 	// Game Variables
-	word, err := randomWord("names.txt")
+	word, err := randomWord(selectedFile)
 	if err != nil {
 		fmt.Println("Error reading word file:", err)
 		return
@@ -132,15 +197,12 @@ func main() {
 	var guessedLetters []string
 
 	// Game introduction
-	fmt.Println("Welcome to HipHop Hangman!")
+	// fmt.Println("Welcome to HipHop Hangman!")
 	fmt.Println("Guess the artist's name:")
 
 	// Initial display
 	displayWordState(currentState, guesses)
 	displayGuessedLetters(guessedLetters)
-
-	// take user input using bufio and os packages
-	scanner := bufio.NewScanner(os.Stdin)
 
 	// receive user input
 	for guesses > 0 {

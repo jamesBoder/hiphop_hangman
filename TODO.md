@@ -4,3 +4,8 @@
 - [x] Add displayGuessedLetters function and call it after each guess
 - [x] Convert the selected word to uppercase for consistent comparison
 - [ ] Test the updated game to verify spaces/hyphens are handled and guessed letters are tracked/displayed
+- [x] Create location-based category files (east_coast.txt, west_coast.txt, south.txt, midwest.txt, international.txt, groups.txt)
+- [x] Add category selection menu to main.go
+- [x] Update randomWord function to accept category parameter
+- [x] Add category statistics display (number of artists per category)
+- [x] Test category selection and word loading from different categories
