@@ -1,0 +1,6 @@
+- [x] Modify initWordState function to reveal spaces and hyphens instead of underscores
+- [x] Add guessedLetters slice in main function
+- [x] Update game loop to check for already guessed letters and prevent repeats
+- [x] Add displayGuessedLetters function and call it after each guess
+- [x] Convert the selected word to uppercase for consistent comparison
+- [ ] Test the updated game to verify spaces/hyphens are handled and guessed letters are tracked/displayed

@@ -3,17 +3,23 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 )
 
 // CLI Hiphop Hangman game
 
-// Init word state. This function creates a slice of the same length as the word and fills it with underscores.
+// Init word state. This function creates a slice of the same length as the word and fills it with underscores,
+// but reveals spaces and hyphens as is.
 func initWordState(word string) []string {
 	state := make([]string, len(word))
-	for i := range state {
-		state[i] = "_"
+	for i, char := range word {
+		if char == ' ' || char == '-' {
+			state[i] = string(char)
+		} else {
+			state[i] = "_"
+		}
 	}
 	return state
 }
@@ -87,15 +93,43 @@ func displayHangman(attempts int) {
 	}
 }
 
+// create a random word function using names.go and math/rand
+func randomWord(file string) (string, error) {
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return "", err
+	}
+
+	words := strings.Split(string(data), "\n")
+
+	return words[rand.Intn(len(words))], nil
+}
+
+// Helper function to display guessed letters
+func displayGuessedLetters(guessed []string) {
+	fmt.Println("Guessed letters:", strings.Join(guessed, " "))
+}
+
 func main() {
 
 	// Game Variables
-	word := "GOLANG"
+	word, err := randomWord("names.txt")
+	if err != nil {
+		fmt.Println("Error reading word file:", err)
+		return
+	}
+
+	// Convert word to uppercase for consistent comparison
+	word = strings.ToUpper(word)
+
 	guesses := 6
 	playerScore := 0
 
 	// Setup initial state
 	currentState := initWordState(word)
+
+	// Slice to track guessed letters
+	var guessedLetters []string
 
 	// Game introduction
 	fmt.Println("Welcome to HipHop Hangman!")
@@ -103,6 +137,7 @@ func main() {
 
 	// Initial display
 	displayWordState(currentState, guesses)
+	displayGuessedLetters(guessedLetters)
 
 	// take user input using bufio and os packages
 	scanner := bufio.NewScanner(os.Stdin)
@@ -112,6 +147,23 @@ func main() {
 		fmt.Print("Enter your guess (single letter or full word): ")
 		scanner.Scan()
 		guess := strings.ToUpper(scanner.Text())
+
+		// Check if letter was already guessed
+		if len(guess) == 1 {
+			alreadyGuessed := false
+			for _, g := range guessedLetters {
+				if g == guess {
+					alreadyGuessed = true
+					break
+				}
+			}
+			if alreadyGuessed {
+				fmt.Println("You already guessed that letter. Try again.")
+				continue
+			}
+			// Add to guessed letters
+			guessedLetters = append(guessedLetters, guess)
+		}
 
 		if len(guess) == 1 {
 			// Single letter guess
@@ -134,6 +186,7 @@ func main() {
 
 			// Show updated state of word after guess
 			displayWordState(currentState, guesses)
+			displayGuessedLetters(guessedLetters)
 		} else if len(guess) == len(word) {
 			// Full word guess
 			if guess == word {
