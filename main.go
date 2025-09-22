@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -412,14 +413,9 @@ func RunCLIGame() {
 
 		// Check if letter was already guessed
 		if len(guess) == 1 {
-			alreadyGuessed := false
-			for _, g := range game.GuessedLetters {
-				if strings.ToUpper(g) == strings.ToUpper(guess) {
-					alreadyGuessed = true
-					break
-				}
-			}
-			if alreadyGuessed {
+			if slices.ContainsFunc(game.GuessedLetters, func(g string) bool {
+				return strings.EqualFold(g, guess)
+			}) {
 				fmt.Println("You already guessed that letter. Try again.")
 				continue
 			}
@@ -457,6 +453,6 @@ func RunCLIGame() {
 }
 
 func main() {
-	// Start the GUI version by default
-	createGUI()
+	// Start with the unified GUI manager that allows dynamic switching
+	selectGUIMode()
 }

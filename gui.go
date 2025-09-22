@@ -16,18 +16,21 @@ type GameGUI struct {
 	window       fyne.Window
 	game         *GameState
 	selectedFile string
+	themeManager *ThemeManager
 
 	// UI Elements
-	titleLabel     *widget.Label
-	wordLabel      *widget.Label
-	hangmanLabel   *widget.Label
-	attemptsLabel  *widget.Label
-	guessedLabel   *widget.Label
-	scoreLabel     *widget.Label
-	guessEntry     *widget.Entry
-	guessButton    *widget.Button
-	newGameButton  *widget.Button
-	categorySelect *widget.Select
+	titleLabel      *widget.Label
+	wordLabel       *widget.Label
+	hangmanLabel    *widget.Label
+	attemptsLabel   *widget.Label
+	guessedLabel    *widget.Label
+	scoreLabel      *widget.Label
+	guessEntry      *widget.Entry
+	guessButton     *widget.Button
+	newGameButton   *widget.Button
+	categorySelect  *widget.Select
+	themeSelect     *widget.Select
+	switchGUIButton *widget.Button
 
 	// Containers
 	gameContainer     *fyne.Container
@@ -49,7 +52,7 @@ func createGUI() {
 
 func (gui *GameGUI) setupUI() {
 	// Create UI elements
-	gui.titleLabel = widget.NewLabel("🎤 Hip-Hop Hangman 🎤")
+	gui.titleLabel = widget.NewLabel("🎤 Hip-Hop Hangman - Basic GUI 🎤")
 	gui.titleLabel.Alignment = fyne.TextAlignCenter
 	gui.titleLabel.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -82,6 +85,24 @@ func (gui *GameGUI) setupUI() {
 	gui.guessButton = widget.NewButton("Make Guess", gui.makeGuess)
 	gui.newGameButton = widget.NewButton("New Game", gui.showCategorySelection)
 
+	// Theme selector
+	if gui.themeManager != nil {
+		gui.themeSelect = widget.NewSelect(gui.themeManager.GetThemeNames(), func(selected string) {
+			gui.themeManager.SetTheme(selected)
+		})
+		gui.themeSelect.SetSelected("Hip-Hop")
+	}
+
+	// GUI style switcher
+	gui.switchGUIButton = widget.NewButton("🎨 Switch to Modern GUI", func() {
+		manager := GetGUIManager()
+		// Update game state in manager before switching
+		if gui.game != nil {
+			manager.UpdateGameState(gui.game, gui.selectedFile)
+		}
+		manager.SwitchToModernGUI()
+	})
+
 	// Category selection
 	categoryOptions := make([]string, 0, len(CategoryNames))
 	for i := 1; i <= 7; i++ {
@@ -104,6 +125,24 @@ func (gui *GameGUI) showCategorySelection() {
 	instructionLabel := widget.NewLabel("Select a category to start playing:")
 	instructionLabel.Alignment = fyne.TextAlignCenter
 
+	// Create controls container
+	controlsContainer := container.NewVBox()
+
+	// Add theme selector if available
+	if gui.themeSelect != nil {
+		themeLabel := widget.NewLabel("🎨 Choose Theme:")
+		themeLabel.Alignment = fyne.TextAlignCenter
+		controlsContainer.Add(themeLabel)
+		controlsContainer.Add(gui.themeSelect)
+		controlsContainer.Add(widget.NewSeparator())
+	}
+
+	// Add GUI switcher
+	guiLabel := widget.NewLabel("🔄 GUI Style:")
+	guiLabel.Alignment = fyne.TextAlignCenter
+	controlsContainer.Add(guiLabel)
+	controlsContainer.Add(gui.switchGUIButton)
+
 	gui.categoryContainer = container.NewVBox(
 		gui.titleLabel,
 		widget.NewSeparator(),
@@ -111,6 +150,8 @@ func (gui *GameGUI) showCategorySelection() {
 		widget.NewSeparator(),
 		instructionLabel,
 		gui.categorySelect,
+		widget.NewSeparator(),
+		controlsContainer,
 	)
 
 	gui.window.SetContent(gui.categoryContainer)
@@ -226,10 +267,29 @@ func (gui *GameGUI) setupGameUI() {
 		container.NewCenter(gui.guessButton),
 	)
 
-	// Button container centered
-	buttonContainer := container.NewCenter(
-		gui.newGameButton,
+	// Button container with game controls and GUI switcher
+	gameButtonsRow := container.NewGridWithColumns(2, gui.newGameButton, gui.switchGUIButton)
+
+	// Theme selector row if available
+	var themeRow *fyne.Container
+	if gui.themeSelect != nil {
+		themeLabel := widget.NewLabel("🎨 Theme:")
+		themeLabel.Alignment = fyne.TextAlignCenter
+		themeRow = container.NewVBox(
+			themeLabel,
+			gui.themeSelect,
+		)
+	}
+
+	// Button container with all controls
+	buttonContainer := container.NewVBox(
+		gameButtonsRow,
 	)
+
+	if themeRow != nil {
+		buttonContainer.Add(widget.NewSeparator())
+		buttonContainer.Add(themeRow)
+	}
 
 	// Main game container with everything centered
 	gui.gameContainer = container.NewVBox(
@@ -238,7 +298,8 @@ func (gui *GameGUI) setupGameUI() {
 		container.NewCenter(gameArea),
 		widget.NewSeparator(),
 		inputContainer,
-		buttonContainer,
+		widget.NewSeparator(),
+		container.NewCenter(buttonContainer),
 	)
 
 	gui.window.SetContent(gui.gameContainer)
