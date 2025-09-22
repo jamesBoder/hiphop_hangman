@@ -30,3 +30,13 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Built executables
+hangman_app
+hiphop_hangman
+main
+
+# Test files
+*_test.go
+test_*.go
+layout_verify.go
