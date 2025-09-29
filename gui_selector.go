@@ -26,8 +26,9 @@ type UnifiedGUIManager struct {
 	themeManager *ThemeManager
 
 	// Shared game state
-	gameState    *GameState
-	selectedFile string
+	gameState          *GameState
+	selectedFile       string
+	selectedDifficulty Difficulty
 
 	// GUI instances
 	basicGUI  *GameGUI
@@ -70,6 +71,7 @@ func (m *UnifiedGUIManager) SwitchToBasicGUI() {
 	if m.gameState != nil {
 		m.basicGUI.game = m.gameState
 		m.basicGUI.selectedFile = m.selectedFile
+		m.basicGUI.selectedDifficulty = m.selectedDifficulty
 		m.basicGUI.setupGameUI()
 		m.basicGUI.updateGameDisplay()
 	} else {
@@ -96,6 +98,7 @@ func (m *UnifiedGUIManager) SwitchToModernGUI() {
 	if m.gameState != nil {
 		m.modernGUI.game = m.gameState
 		m.modernGUI.selectedFile = m.selectedFile
+		m.modernGUI.selectedDifficulty = m.selectedDifficulty
 		m.modernGUI.setupModernGameUI()
 		m.modernGUI.updateModernGameDisplay()
 	} else {
@@ -114,6 +117,9 @@ func (m *UnifiedGUIManager) SwitchToDemoGUI() {
 func (m *UnifiedGUIManager) UpdateGameState(game *GameState, selectedFile string) {
 	m.gameState = game
 	m.selectedFile = selectedFile
+	if game != nil {
+		m.selectedDifficulty = game.Difficulty
+	}
 }
 
 // GetCurrentStyle returns the current GUI style

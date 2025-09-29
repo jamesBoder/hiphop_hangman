@@ -40,3 +40,6 @@ main
 *_test.go
 test_*.go
 layout_verify.go
+
+# .md files
+.md

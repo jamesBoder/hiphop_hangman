@@ -15,11 +15,13 @@ import (
 
 // ModernGameGUI implements a modern Material Design-inspired interface
 type ModernGameGUI struct {
-	app          fyne.App
-	window       fyne.Window
-	game         *GameState
-	selectedFile string
-	themeManager *ThemeManager
+	app                fyne.App
+	window             fyne.Window
+	game               *GameState
+	session            *GameSession
+	selectedFile       string
+	selectedDifficulty Difficulty
+	themeManager       *ThemeManager
 
 	// UI Elements
 	titleCard   *fyne.Container
@@ -29,19 +31,23 @@ type ModernGameGUI struct {
 	hangmanCard *fyne.Container
 
 	// Widgets
-	titleLabel      *widget.Label
-	wordLabel       *widget.Label
-	hangmanLabel    *widget.Label
-	attemptsLabel   *widget.Label
-	guessedLabel    *widget.Label
-	scoreLabel      *widget.Label
-	progressBar     *widget.ProgressBar
-	guessEntry      *widget.Entry
-	guessButton     *widget.Button
-	newGameButton   *widget.Button
-	themeSelect     *widget.Select
-	categorySelect  *widget.Select
-	switchGUIButton *widget.Button
+	titleLabel         *widget.Label
+	wordLabel          *widget.Label
+	hangmanLabel       *widget.Label
+	attemptsLabel      *widget.Label
+	guessedLabel       *widget.Label
+	scoreLabel         *widget.Label
+	sessionStatsLabel  *widget.Label
+	difficultyLabel    *widget.Label
+	progressBar        *widget.ProgressBar
+	guessEntry         *widget.Entry
+	guessButton        *widget.Button
+	newGameButton      *widget.Button
+	resetSessionButton *widget.Button
+	themeSelect        *widget.Select
+	categorySelect     *widget.Select
+	difficultySelect   *widget.Select
+	switchGUIButton    *widget.Button
 
 	// Advanced widgets
 	tabs    *container.AppTabs
@@ -114,14 +120,18 @@ func (gui *ModernGameGUI) createCards() {
 
 	// Stats Card - Game statistics
 	gui.scoreLabel = widget.NewLabel("Score: 0")
+	gui.sessionStatsLabel = widget.NewLabel("Session: 0 games played")
 	gui.attemptsLabel = widget.NewLabel("Lives: 6")
+	gui.difficultyLabel = widget.NewLabel("Difficulty: Normal")
 	gui.progressBar = widget.NewProgressBar()
 	gui.progressBar.SetValue(1.0) // Start at full
 
 	gui.statsCard = container.NewVBox(
 		widget.NewCard("📊 Game Stats", "", container.NewVBox(
 			gui.scoreLabel,
+			gui.sessionStatsLabel,
 			gui.attemptsLabel,
+			gui.difficultyLabel,
 			widget.NewLabel("Progress:"),
 			gui.progressBar,
 		)),
@@ -161,6 +171,7 @@ func (gui *ModernGameGUI) createCards() {
 
 	gui.guessButton = widget.NewButton("🎯 Make Guess", gui.makeModernGuess)
 	gui.newGameButton = widget.NewButton("🎮 New Game", gui.showModernCategorySelection)
+	gui.resetSessionButton = widget.NewButton("🔄 Reset Session", gui.resetModernSession)
 
 	// GUI style switcher
 	gui.switchGUIButton = widget.NewButton("🎤 Switch to Basic GUI", func() {
@@ -172,7 +183,7 @@ func (gui *ModernGameGUI) createCards() {
 		manager.SwitchToBasicGUI()
 	})
 
-	buttonContainer := container.NewGridWithColumns(3, gui.guessButton, gui.newGameButton, gui.switchGUIButton)
+	buttonContainer := container.NewGridWithColumns(4, gui.guessButton, gui.newGameButton, gui.resetSessionButton, gui.switchGUIButton)
 
 	gui.inputCard = container.NewVBox(
 		widget.NewCard("💭 Your Guess", "", container.NewVBox(
@@ -223,12 +234,28 @@ func (gui *ModernGameGUI) showModernCategorySelection() {
 	gui.categorySelect = widget.NewSelect(categoryOptions, gui.onModernCategorySelected)
 	gui.categorySelect.PlaceHolder = "🎵 Choose your musical category..."
 
+	// Difficulty selection
+	difficultyOptions := []string{
+		DifficultyNames[Easy],
+		DifficultyNames[Normal],
+		DifficultyNames[Hard],
+	}
+	gui.difficultySelect = widget.NewSelect(difficultyOptions, gui.onModernDifficultySelected)
+	gui.difficultySelect.SetSelected(DifficultyNames[Normal]) // Default to Normal
+	gui.selectedDifficulty = Normal
+
+	difficultyLabel := widget.NewLabel("Choose your challenge level:")
+	difficultyLabel.Alignment = fyne.TextAlignCenter
+
 	// Create welcome card
 	welcomeCard := widget.NewCard("🎵 Welcome", "", container.NewVBox(
 		welcomeLabel,
 		widget.NewSeparator(),
 		instructionLabel,
 		gui.categorySelect,
+		widget.NewSeparator(),
+		difficultyLabel,
+		gui.difficultySelect,
 	))
 
 	// Theme selection card
@@ -249,7 +276,7 @@ func (gui *ModernGameGUI) showModernCategorySelection() {
 		guiCard,
 		widget.NewCard("ℹ️ Info", "", container.NewVBox(
 			widget.NewLabel("Hip-Hop Hangman"),
-			widget.NewLabel("Modern Edition"),
+			widget.NewLabel("Modern Layout"),
 			widget.NewLabel("v2.0"),
 		)),
 	)
@@ -284,9 +311,28 @@ func (gui *ModernGameGUI) onModernCategorySelected(selected string) {
 	}
 }
 
+func (gui *ModernGameGUI) onModernDifficultySelected(selected string) {
+	if selected == "" {
+		return
+	}
+
+	// Map selected string back to difficulty level
+	for difficulty, name := range DifficultyNames {
+		if name == selected {
+			gui.selectedDifficulty = difficulty
+			break
+		}
+	}
+}
+
 func (gui *ModernGameGUI) startModernGame() {
 	if gui.selectedFile == "" {
 		return
+	}
+
+	// Initialize session if not exists or difficulty changed
+	if gui.session == nil || gui.session.Difficulty != gui.selectedDifficulty {
+		gui.session = NewGameSession(gui.selectedDifficulty)
 	}
 
 	// Get random word from selected category
@@ -296,12 +342,14 @@ func (gui *ModernGameGUI) startModernGame() {
 		return
 	}
 
-	// Create new game
-	gui.game = NewGame(word)
+	// Start new game in session
+	gui.session.StartNewGame(word)
+	gui.game = gui.session.CurrentGame
 
 	// Setup modern game UI
 	gui.setupModernGameUI()
 	gui.updateModernGameDisplay()
+	gui.updateModernSessionDisplay()
 }
 
 func (gui *ModernGameGUI) setupModernGameUI() {
@@ -374,8 +422,15 @@ func (gui *ModernGameGUI) createStatsTab() *fyne.Container {
 
 func (gui *ModernGameGUI) createSettingsTab() *fyne.Container {
 	// Create settings controls
-	difficultySelect := widget.NewSelect([]string{"Easy", "Medium", "Hard"}, nil)
-	difficultySelect.SetSelected("Medium")
+	difficultyOptions := []string{
+		DifficultyNames[Easy],
+		DifficultyNames[Normal],
+		DifficultyNames[Hard],
+	}
+	settingsDifficultySelect := widget.NewSelect(difficultyOptions, func(selected string) {
+		gui.onModernDifficultySelected(selected)
+	})
+	settingsDifficultySelect.SetSelected(DifficultyNames[Normal])
 
 	soundCheck := widget.NewCheck("Enable Sound Effects", nil)
 	animationsCheck := widget.NewCheck("Enable Animations", nil)
@@ -383,7 +438,7 @@ func (gui *ModernGameGUI) createSettingsTab() *fyne.Container {
 
 	settingsCard := widget.NewCard("⚙️ Game Settings", "", container.NewVBox(
 		widget.NewLabel("Difficulty:"),
-		difficultySelect,
+		settingsDifficultySelect,
 		soundCheck,
 		animationsCheck,
 	))
@@ -412,8 +467,12 @@ func (gui *ModernGameGUI) updateModernGameDisplay() {
 	gui.scoreLabel.SetText(fmt.Sprintf("🏆 Score: %d", gui.game.Score))
 
 	// Update progress bar (based on remaining attempts)
-	progress := float64(gui.game.Attempts) / 6.0
+	progress := float64(gui.game.Attempts) / float64(gui.game.MaxAttempts)
 	gui.progressBar.SetValue(progress)
+
+	// Update difficulty display
+	difficultyName := DifficultyNames[gui.game.Difficulty]
+	gui.difficultyLabel.SetText(fmt.Sprintf("⚡ %s", difficultyName))
 
 	// Update guessed letters
 	if len(gui.game.GuessedLetters) > 0 {
@@ -492,15 +551,23 @@ func (gui *ModernGameGUI) showModernNotification(message, notificationType strin
 }
 
 func (gui *ModernGameGUI) handleModernGameOver() {
+	// Complete the game in session to update stats and score
+	if gui.session != nil {
+		gui.session.CompleteGame()
+		gui.updateModernSessionDisplay()
+	}
+
 	gui.guessEntry.Disable()
 
 	var title, message string
 	if gui.game.IsWon {
 		title = "🎉 Victory!"
-		message = fmt.Sprintf("Congratulations! You guessed '%s'\nScore: %d points", gui.game.Word, gui.game.Score)
+		message = fmt.Sprintf("Congratulations! You guessed '%s'\nTotal Score: %d points\n%s",
+			gui.game.Word, gui.game.Score, gui.session.GetSessionStats())
 	} else {
 		title = "💀 Game Over"
-		message = fmt.Sprintf("The word was: %s\nBetter luck next time!", gui.game.Word)
+		message = fmt.Sprintf("The word was: %s\nTotal Score: %d points\n%s",
+			gui.game.Word, gui.game.Score, gui.session.GetSessionStats())
 	}
 
 	dialog.ShowConfirm(title, message+"\n\nPlay again?", func(playAgain bool) {
@@ -530,4 +597,19 @@ func (gui *ModernGameGUI) showAboutDialog() {
 	)
 
 	dialog.ShowCustom("ℹ️ About", "Close", about, gui.window)
+}
+
+// resetModernSession resets the game session statistics
+func (gui *ModernGameGUI) resetModernSession() {
+	if gui.session != nil {
+		gui.session.ResetSession()
+		gui.updateModernSessionDisplay()
+	}
+}
+
+// updateModernSessionDisplay updates the session statistics display
+func (gui *ModernGameGUI) updateModernSessionDisplay() {
+	if gui.session != nil {
+		gui.sessionStatsLabel.SetText(gui.session.GetSessionStats())
+	}
 }

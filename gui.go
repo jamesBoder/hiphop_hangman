@@ -12,25 +12,31 @@ import (
 )
 
 type GameGUI struct {
-	app          fyne.App
-	window       fyne.Window
-	game         *GameState
-	selectedFile string
-	themeManager *ThemeManager
+	app                fyne.App
+	window             fyne.Window
+	game               *GameState
+	session            *GameSession
+	selectedFile       string
+	selectedDifficulty Difficulty
+	themeManager       *ThemeManager
 
 	// UI Elements
-	titleLabel      *widget.Label
-	wordLabel       *widget.Label
-	hangmanLabel    *widget.Label
-	attemptsLabel   *widget.Label
-	guessedLabel    *widget.Label
-	scoreLabel      *widget.Label
-	guessEntry      *widget.Entry
-	guessButton     *widget.Button
-	newGameButton   *widget.Button
-	categorySelect  *widget.Select
-	themeSelect     *widget.Select
-	switchGUIButton *widget.Button
+	titleLabel         *widget.Label
+	wordLabel          *widget.Label
+	hangmanLabel       *widget.Label
+	attemptsLabel      *widget.Label
+	guessedLabel       *widget.Label
+	scoreLabel         *widget.Label
+	sessionStatsLabel  *widget.Label
+	difficultyLabel    *widget.Label
+	guessEntry         *widget.Entry
+	guessButton        *widget.Button
+	newGameButton      *widget.Button
+	resetSessionButton *widget.Button
+	categorySelect     *widget.Select
+	difficultySelect   *widget.Select
+	themeSelect        *widget.Select
+	switchGUIButton    *widget.Button
 
 	// Containers
 	gameContainer     *fyne.Container
@@ -73,6 +79,12 @@ func (gui *GameGUI) setupUI() {
 	gui.scoreLabel = widget.NewLabel("Score: 0")
 	gui.scoreLabel.Alignment = fyne.TextAlignCenter
 
+	gui.sessionStatsLabel = widget.NewLabel("Session: 0 games played")
+	gui.sessionStatsLabel.Alignment = fyne.TextAlignCenter
+
+	gui.difficultyLabel = widget.NewLabel("Difficulty: Normal")
+	gui.difficultyLabel.Alignment = fyne.TextAlignCenter
+
 	// Create a single-line entry field that responds to Enter key
 	gui.guessEntry = widget.NewEntry()
 	gui.guessEntry.SetPlaceHolder("🎤 Enter a letter or full word here... 🎤")
@@ -84,6 +96,7 @@ func (gui *GameGUI) setupUI() {
 
 	gui.guessButton = widget.NewButton("Make Guess", gui.makeGuess)
 	gui.newGameButton = widget.NewButton("New Game", gui.showCategorySelection)
+	gui.resetSessionButton = widget.NewButton("Reset Session", gui.resetSession)
 
 	// Theme selector
 	if gui.themeManager != nil {
@@ -116,14 +129,28 @@ func (gui *GameGUI) setupUI() {
 
 	gui.categorySelect = widget.NewSelect(categoryOptions, gui.onCategorySelected)
 	gui.categorySelect.PlaceHolder = "Choose a category..."
+
+	// Difficulty selection
+	difficultyOptions := []string{
+		DifficultyNames[Easy],
+		DifficultyNames[Normal],
+		DifficultyNames[Hard],
+	}
+	gui.difficultySelect = widget.NewSelect(difficultyOptions, gui.onDifficultySelected)
+	gui.difficultySelect.SetSelected(DifficultyNames[Normal]) // Default to Normal
+	gui.selectedDifficulty = Normal
 }
 
 func (gui *GameGUI) showCategorySelection() {
 	welcomeLabel := widget.NewLabel("Welcome to the ultimate hip-hop artist guessing game!")
 	welcomeLabel.Alignment = fyne.TextAlignCenter
 
-	instructionLabel := widget.NewLabel("Select a category to start playing:")
+	instructionLabel := widget.NewLabel("Select a category and difficulty to start playing:")
 	instructionLabel.Alignment = fyne.TextAlignCenter
+
+	// Difficulty selection
+	difficultyInstructionLabel := widget.NewLabel("Choose your difficulty level:")
+	difficultyInstructionLabel.Alignment = fyne.TextAlignCenter
 
 	// Create controls container
 	controlsContainer := container.NewVBox()
@@ -151,6 +178,9 @@ func (gui *GameGUI) showCategorySelection() {
 		instructionLabel,
 		gui.categorySelect,
 		widget.NewSeparator(),
+		difficultyInstructionLabel,
+		gui.difficultySelect,
+		widget.NewSeparator(),
 		controlsContainer,
 	)
 
@@ -175,9 +205,29 @@ func (gui *GameGUI) onCategorySelected(selected string) {
 	}
 }
 
+func (gui *GameGUI) onDifficultySelected(selected string) {
+	if selected == "" {
+		return
+	}
+
+	// Map selected string back to difficulty level
+	for difficulty, name := range DifficultyNames {
+		if name == selected {
+			gui.selectedDifficulty = difficulty
+			gui.difficultyLabel.SetText(fmt.Sprintf("Difficulty: %s", selected))
+			break
+		}
+	}
+}
+
 func (gui *GameGUI) startNewGame() {
 	if gui.selectedFile == "" {
 		return
+	}
+
+	// Initialize session if not exists or difficulty changed
+	if gui.session == nil || gui.session.Difficulty != gui.selectedDifficulty {
+		gui.session = NewGameSession(gui.selectedDifficulty)
 	}
 
 	// Get random word from selected category
@@ -187,12 +237,14 @@ func (gui *GameGUI) startNewGame() {
 		return
 	}
 
-	// Create new game
-	gui.game = NewGame(word)
+	// Start new game in session
+	gui.session.StartNewGame(word)
+	gui.game = gui.session.CurrentGame
 
 	// Setup game UI
 	gui.setupGameUI()
 	gui.updateGameDisplay()
+	gui.updateSessionDisplay()
 }
 
 func (gui *GameGUI) setupGameUI() {
@@ -225,7 +277,9 @@ func (gui *GameGUI) setupGameUI() {
 		container.NewCenter(gui.wordLabel),
 		widget.NewSeparator(),
 		container.NewCenter(gui.scoreLabel),
+		container.NewCenter(gui.sessionStatsLabel),
 		container.NewCenter(gui.attemptsLabel),
+		container.NewCenter(gui.difficultyLabel),
 		widget.NewSeparator(),
 		container.NewCenter(gui.guessedLabel),
 	)
@@ -268,7 +322,7 @@ func (gui *GameGUI) setupGameUI() {
 	)
 
 	// Button container with game controls and GUI switcher
-	gameButtonsRow := container.NewGridWithColumns(2, gui.newGameButton, gui.switchGUIButton)
+	gameButtonsRow := container.NewGridWithColumns(3, gui.newGameButton, gui.resetSessionButton, gui.switchGUIButton)
 
 	// Theme selector row if available
 	var themeRow *fyne.Container
@@ -328,6 +382,10 @@ func (gui *GameGUI) updateGameDisplay() {
 
 	// Update score
 	gui.scoreLabel.SetText(fmt.Sprintf("🏆 Score: %d", gui.game.Score))
+
+	// Update difficulty display
+	difficultyName := DifficultyNames[gui.game.Difficulty]
+	gui.difficultyLabel.SetText(fmt.Sprintf("⚡ %s", difficultyName))
 
 	// Check game over conditions
 	if gui.game.IsGameOver {
@@ -428,6 +486,12 @@ func (gui *GameGUI) showCustomDialog(title, message string) {
 }
 
 func (gui *GameGUI) handleGameOver() {
+	// Complete the game in session to update stats and score
+	if gui.session != nil {
+		gui.session.CompleteGame()
+		gui.updateSessionDisplay()
+	}
+
 	// Disable input
 	gui.guessEntry.Disable()
 	gui.guessButton.Disable()
@@ -438,10 +502,12 @@ func (gui *GameGUI) handleGameOver() {
 
 	if gui.game.IsWon {
 		title = "🎉 Congratulations! 🎉"
-		message = fmt.Sprintf("You guessed the word: %s\nYour score: %d points", gui.game.Word, gui.game.Score)
+		message = fmt.Sprintf("You guessed the word: %s\nTotal Score: %d points\n%s",
+			gui.game.Word, gui.game.Score, gui.session.GetSessionStats())
 	} else {
 		title = "💀 Game Over 💀"
-		message = fmt.Sprintf("The correct word was: %s\nBetter luck next time!", gui.game.Word)
+		message = fmt.Sprintf("The correct word was: %s\nTotal Score: %d points\n%s",
+			gui.game.Word, gui.game.Score, gui.session.GetSessionStats())
 	}
 
 	// Show dialog with option to play again
@@ -453,4 +519,19 @@ func (gui *GameGUI) handleGameOver() {
 				gui.app.Quit()
 			}
 		}, gui.window)
+}
+
+// resetSession resets the game session statistics
+func (gui *GameGUI) resetSession() {
+	if gui.session != nil {
+		gui.session.ResetSession()
+		gui.updateSessionDisplay()
+	}
+}
+
+// updateSessionDisplay updates the session statistics display
+func (gui *GameGUI) updateSessionDisplay() {
+	if gui.session != nil {
+		gui.sessionStatsLabel.SetText(gui.session.GetSessionStats())
+	}
 }

@@ -9,15 +9,120 @@ import (
 	"strings"
 )
 
+// Difficulty levels for the game
+type Difficulty int
+
+const (
+	Easy Difficulty = iota
+	Normal
+	Hard
+)
+
+// DifficultyNames maps difficulty levels to display names
+var DifficultyNames = map[Difficulty]string{
+	Easy:   "Easy (8 attempts - 2 extra lives)",
+	Normal: "Normal (6 attempts - 1 extra life)",
+	Hard:   "Hard (4 attempts - no extra lives)",
+}
+
+// DifficultyAttempts maps difficulty levels to attempt counts
+var DifficultyAttempts = map[Difficulty]int{
+	Easy:   8, // 2 extra lives
+	Normal: 6, // 1 extra life (current default)
+	Hard:   4, // no extra lives
+}
+
+// DifficultyMultipliers maps difficulty levels to score multipliers
+var DifficultyMultipliers = map[Difficulty]float64{
+	Easy:   1.0, // 1x multiplier
+	Normal: 1.5, // 1.5x multiplier
+	Hard:   2.0, // 2x multiplier
+}
+
 // Game state structure
 type GameState struct {
 	Word           string
 	CurrentState   []string
 	GuessedLetters []string
 	Attempts       int
+	MaxAttempts    int        // Maximum attempts for this difficulty
+	Difficulty     Difficulty // Current difficulty level
 	Score          int
 	IsGameOver     bool
 	IsWon          bool
+}
+
+// GameSession manages persistent scoring across multiple games
+type GameSession struct {
+	TotalScore  int
+	GamesPlayed int
+	GamesWon    int
+	CurrentGame *GameState
+	Difficulty  Difficulty
+}
+
+// NewGameSession creates a new game session with persistent scoring
+func NewGameSession(difficulty Difficulty) *GameSession {
+	return &GameSession{
+		TotalScore:  0,
+		GamesPlayed: 0,
+		GamesWon:    0,
+		CurrentGame: nil,
+		Difficulty:  difficulty,
+	}
+}
+
+// StartNewGame starts a new game within the session, preserving total score
+func (session *GameSession) StartNewGame(word string) {
+	session.GamesPlayed++
+	maxAttempts := DifficultyAttempts[session.Difficulty]
+
+	session.CurrentGame = &GameState{
+		Word:           strings.ToUpper(word),
+		CurrentState:   InitWordState(strings.ToUpper(word)),
+		GuessedLetters: []string{},
+		Attempts:       maxAttempts,
+		MaxAttempts:    maxAttempts,
+		Difficulty:     session.Difficulty,
+		Score:          session.TotalScore, // Start with cumulative score
+		IsGameOver:     false,
+		IsWon:          false,
+	}
+}
+
+// CompleteGame handles game completion and updates session stats
+func (session *GameSession) CompleteGame() {
+	if session.CurrentGame != nil && session.CurrentGame.IsGameOver {
+		if session.CurrentGame.IsWon {
+			session.GamesWon++
+			// Add the points earned this game to total score
+			baseScore := 10
+			multiplier := DifficultyMultipliers[session.Difficulty]
+			pointsEarned := int(float64(baseScore) * multiplier)
+			session.TotalScore += pointsEarned
+		}
+		// Update current game score to reflect total
+		session.CurrentGame.Score = session.TotalScore
+	}
+}
+
+// GetSessionStats returns formatted session statistics
+func (session *GameSession) GetSessionStats() string {
+	winRate := 0.0
+	if session.GamesPlayed > 0 {
+		winRate = float64(session.GamesWon) / float64(session.GamesPlayed) * 100
+	}
+
+	return fmt.Sprintf("Session Stats: %d games played, %d won (%.1f%% win rate), Total Score: %d",
+		session.GamesPlayed, session.GamesWon, winRate, session.TotalScore)
+}
+
+// ResetSession resets the session statistics
+func (session *GameSession) ResetSession() {
+	session.TotalScore = 0
+	session.GamesPlayed = 0
+	session.GamesWon = 0
+	session.CurrentGame = nil
 }
 
 // Category mapping
@@ -284,13 +389,21 @@ func DisplayGuessedLetters(guessed []string) {
 	fmt.Println("Guessed letters:", strings.Join(guessed, " "))
 }
 
-// NewGame creates a new game state with the given word
+// NewGame creates a new game state with the given word using Normal difficulty
 func NewGame(word string) *GameState {
+	return NewGameWithDifficulty(word, Normal)
+}
+
+// NewGameWithDifficulty creates a new game state with the given word and difficulty
+func NewGameWithDifficulty(word string, difficulty Difficulty) *GameState {
+	maxAttempts := DifficultyAttempts[difficulty]
 	return &GameState{
 		Word:           strings.ToUpper(word),
 		CurrentState:   InitWordState(strings.ToUpper(word)),
 		GuessedLetters: []string{},
-		Attempts:       6,
+		Attempts:       maxAttempts,
+		MaxAttempts:    maxAttempts,
+		Difficulty:     difficulty,
 		Score:          0,
 		IsGameOver:     false,
 		IsWon:          false,
@@ -308,8 +421,8 @@ func (g *GameState) MakeGuess(guess string) bool {
 	if len(guess) == 1 {
 		// Single letter guess
 		// Check if already guessed
-		for _, g := range g.GuessedLetters {
-			if g == guess {
+		for _, guessedLetter := range g.GuessedLetters {
+			if guessedLetter == guess {
 				return false // Already guessed
 			}
 		}
@@ -332,7 +445,6 @@ func (g *GameState) MakeGuess(guess string) bool {
 		if strings.Join(g.CurrentState, "") == g.Word {
 			g.IsWon = true
 			g.IsGameOver = true
-			g.Score += 10
 		}
 
 		// Check lose condition
@@ -346,7 +458,6 @@ func (g *GameState) MakeGuess(guess string) bool {
 		if guess == g.Word {
 			g.IsWon = true
 			g.IsGameOver = true
-			g.Score += 10
 			// Fill in the word
 			for i, char := range g.Word {
 				g.CurrentState[i] = string(char)
